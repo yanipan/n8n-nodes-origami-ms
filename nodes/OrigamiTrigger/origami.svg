@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 64 64" fill="none">
+  <!-- Origami.ms crane, simplified for n8n 24–32px -->
+  <polygon points="32,20 12,34 32,50 52,34" fill="#1079A7"/>
+  <polygon points="32,20 6,16 12,34" fill="#BB2329"/>
+  <polygon points="32,20 58,16 52,34" fill="#3FB24F"/>
+  <polygon points="32,20 40,8 28,10" fill="#642875"/>
+  <polygon points="28,10 18,6 24,14" fill="#E11069"/>
+  <polygon points="32,50 22,60 42,60" fill="#99C744"/>
+  <polygon points="32,20 32,50 12,34" fill="#165B83" opacity="0.35"/>
+  <polygon points="32,20 52,34 40,8" fill="#21A085" opacity="0.25"/>
+</svg>

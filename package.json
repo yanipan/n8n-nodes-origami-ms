@@ -1,0 +1,61 @@
+{
+  "name": "n8n-nodes-origami-ms",
+  "version": "0.1.6",
+  "description": "n8n community node for Origami.ms: entities, records, invoices, files, communications and webhooks",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "origami",
+    "crm"
+  ],
+  "license": "MIT",
+  "homepage": "https://origami.ms",
+  "author": {
+    "name": "Origami",
+    "email": "361479+yanipan@users.noreply.github.com",
+    "url": "https://origami.ms"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yanipan/n8n-nodes-origami-ms.git"
+  },
+  "scripts": {
+    "build": "n8n-node build",
+    "dev": "n8n-node dev",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "test": "node --experimental-strip-types --test tests/unwrap.test.ts tests/flatten.test.ts tests/pagination.test.ts tests/fieldTypes.test.ts tests/invoiceCatalog.test.ts tests/errors.test.ts tests/baseUrl.test.ts tests/structure.test.ts tests/apiFlags.test.ts tests/entityParam.test.ts tests/webhookAuth.test.ts tests/aiAccess.test.ts",
+    "test:execute": "tsc -p tsconfig.json && node --test tests/execute.test.mjs",
+    "test:all": "npm test && npm run test:execute",
+    "prepublishOnly": "n8n-node prerelease",
+    "release": "n8n-node release"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "strict": true,
+    "credentials": [
+      "dist/credentials/OrigamiApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Origami/Origami.node.js",
+      "dist/nodes/OrigamiTrigger/OrigamiTrigger.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@n8n/node-cli": "*",
+    "eslint": "9.39.4",
+    "n8n-workflow": "^2.39.2",
+    "prettier": "3.8.3",
+    "release-it": "^20.2.0",
+    "typescript": "5.9.3"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "bugs": {
+    "url": "https://github.com/yanipan/n8n-nodes-origami-ms/issues"
+  }
+}

@@ -1,0 +1,18 @@
+{
+	"node": "n8n-nodes-origami-ms.origami",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Sales", "Communication", "Development"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://documenter.getpostman.com/view/2653695/2s93kz65gS"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://origami.ms"
+			}
+		]
+	}
+}
