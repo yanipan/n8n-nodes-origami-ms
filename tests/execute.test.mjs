@@ -112,12 +112,155 @@ test('Update throws when nothing was updated', async () => {
 	assert.deepEqual(h.calls[0].body.field, [['fld_1', 'x', 0]]);
 });
 
+// n8n 2.39.2 workflow-execute.ts handleNodeErrorOutput:
+// an item leaves the success branch only when item.error is set, or when every json
+// key is one of error, message, details. Extra keys (description, httpCode, ...) do
+// not route unless item.error is set. continueOnFail() is true for both Continue modes.
+function routesByErrorProperty(item) {
+	return Boolean(item.error);
+}
+function routesByJsonFallback(item) {
+	return Boolean(item.json?.error) && Object.keys(item.json).every((key) => ['error', 'message', 'details'].includes(key));
+}
+
 test('HTTP 200 with an error body fails, or becomes an error item with Continue On Fail', async () => {
 	const params = { resource: 'entity', operation: 'getAll' };
-	const respond = () => ({ body: { error: { type: 'login', message: 'Wrong username or password' } } });
-	await assert.rejects(harness({ params, respond }).run(), /login: Wrong username or password/);
+	const respond = () => ({ statusCode: 200, body: { error: { type: 'login', message: 'Wrong username or password' } } });
+	await assert.rejects(harness({ params, respond }).run(), (err) => {
+		assert.equal(err.name, 'NodeApiError');
+		assert.equal(err.httpCode ?? null, null);
+		assert.match(err.message, /Wrong username or password/);
+		assert.match(err.description, /entity\.getAll/);
+		assert.match(err.description, /item 0/);
+		assert.match(err.description, /Wrong username or password/);
+		assert.equal(err.context.itemIndex, 0);
+		return true;
+	});
 	const [out] = await harness({ params, respond, continueOnFail: true }).run();
+	assert.equal(out.length, 1);
 	assert.match(out[0].json.error, /Wrong username or password/);
+	assert.match(out[0].json.description, /entity\.getAll/);
+	assert.match(out[0].json.origamiError, /Wrong username or password/);
+	assert.equal('httpCode' in out[0].json, false);
+	assert.equal(out[0].json.resource, 'entity');
+	assert.equal(out[0].json.operation, 'getAll');
+	assert.equal(out[0].json.itemIndex, 0);
+	assert.deepEqual(out[0].pairedItem, { item: 0 });
+	assert.equal(routesByJsonFallback(out[0]), false);
+	assert.equal(routesByErrorProperty(out[0]), true);
+});
+
+test('Stop Workflow keeps NodeApiError httpCode and a description', async () => {
+	const h = harness({
+		params: { resource: 'record', operation: 'get', entityDataName: 'e_1', instanceId: 'abc', simplify: false },
+		respond: () => ({ statusCode: 403, body: { error: 'no access' } }),
+	});
+	await assert.rejects(h.run(), (err) => {
+		assert.equal(err.name, 'NodeApiError');
+		assert.notEqual(err.name, 'NodeOperationError');
+		assert.equal(err.httpCode, '403');
+		assert.match(err.message, /HTTP 403/);
+		assert.match(err.description, /HTTP 403/);
+		assert.match(err.description, /no access/);
+		assert.match(err.description, /record\.get/);
+		assert.match(err.description, /item 0/);
+		assert.equal(err.context.itemIndex, 0);
+		return true;
+	});
+});
+
+test('Continue keeps successes and puts the failed middle item on the error-output shape', async () => {
+	const h = harness({
+		params: { resource: 'record', operation: 'get', entityDataName: 'e_1', instanceId: 'abc', simplify: false },
+		items: [{ json: {} }, { json: {} }, { json: {} }],
+		continueOnFail: true,
+		respond: (_opts, index) =>
+			index === 1
+				? { statusCode: 500, body: { error: { type: 'server', message: 'boom' } } }
+				: { body: [{ _id: 'ok', n: index }] },
+	});
+	const [out] = await h.run();
+	assert.equal(out.length, 3);
+	assert.equal(out[0].json._id, 'ok');
+	assert.equal(out[0].json.n, 0);
+	assert.equal(out[0].error, undefined);
+	assert.equal(routesByErrorProperty(out[0]), false);
+	assert.deepEqual(out[0].pairedItem, { item: 0 });
+	assert.equal(out[2].json._id, 'ok');
+	assert.equal(out[2].json.n, 2);
+	assert.deepEqual(out[2].pairedItem, { item: 2 });
+	const failed = out[1];
+	assert.deepEqual(failed.pairedItem, { item: 1 });
+	assert.match(failed.json.error, /boom/);
+	assert.match(failed.json.description, /HTTP 500/);
+	assert.match(failed.json.description, /record\.get/);
+	assert.match(failed.json.description, /item 1/);
+	assert.equal(failed.json.httpCode, '500');
+	assert.match(String(failed.json.origamiError), /boom/);
+	assert.equal(failed.json.resource, 'record');
+	assert.equal(failed.json.operation, 'get');
+	assert.equal(failed.json.itemIndex, 1);
+	assert.deepEqual(JSON.parse(JSON.stringify(failed.json)), failed.json);
+	assert.equal(routesByJsonFallback(failed), false);
+	assert.equal(routesByErrorProperty(failed), true);
+	assert.equal(failed.error.httpCode, '500');
+	assert.equal(failed.error.name, 'NodeApiError');
+});
+
+test('Continue on a local failure still fills the error item', async () => {
+	const h = harness({
+		params: { resource: 'record', operation: 'get', entityDataName: 'e_1', instanceId: 'missing', simplify: false },
+		continueOnFail: true,
+		respond: () => ({ body: [] }),
+	});
+	const [out] = await h.run();
+	assert.match(out[0].json.error, /not found/);
+	assert.match(out[0].json.description, /record\.get/);
+	assert.match(out[0].json.description, /item 0/);
+	assert.equal('httpCode' in out[0].json, false);
+	assert.equal('origamiError' in out[0].json, false);
+	assert.equal(out[0].json.resource, 'record');
+	assert.equal(out[0].json.operation, 'get');
+	assert.equal(out[0].json.itemIndex, 0);
+	assert.deepEqual(out[0].pairedItem, { item: 0 });
+	assert.equal(routesByJsonFallback(out[0]), false);
+	assert.equal(routesByErrorProperty(out[0]), true);
+	assert.equal(out[0].error.name, 'NodeOperationError');
+});
+
+test('AI tool Continue On Fail reports a blocked write and does not call HTTP', async () => {
+	const h = harness({
+		nodeType: TOOL,
+		continueOnFail: true,
+		params: { resource: 'record', operation: 'delete', entityDataName: 'e_1', deleteIds: 'a' },
+		respond: () => ({ body: { success: 'ok' } }),
+	});
+	const [out] = await h.run();
+	assert.match(out[0].json.error, /record\.delete is blocked/);
+	assert.equal(out[0].json.resource, 'record');
+	assert.equal(out[0].json.operation, 'delete');
+	assert.equal(h.calls.length, 0);
+	assert.equal(routesByErrorProperty(out[0]), true);
+});
+
+test('loadOptions throws a readable NodeApiError when the HTTP client fails', async () => {
+	const node = new Origami();
+	await assert.rejects(
+		node.methods.loadOptions.getEntities.call({
+			getNode: () => ({ name: 'Origami', type: NODE, typeVersion: 1 }),
+			getCredentials: async () => ({ accountName: 'stage', username: 'u', apiSecret: 's' }),
+			helpers: {
+				httpRequestWithAuthentication: async () => {
+					throw new Error('socket hang up');
+				},
+			},
+		}),
+		(err) => {
+			assert.equal(err.name, 'NodeApiError');
+			assert.match(err.message, /socket hang up/);
+			return true;
+		},
+	);
 });
 
 test('Invoice builder charges VAT by default and can turn it off per line', async () => {

@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-origami-ms",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "n8n community node for Origami.ms: entities, records, invoices, files, communications and webhooks",
   "keywords": [
     "n8n-community-node-package",
@@ -24,7 +24,7 @@
     "dev": "n8n-node dev",
     "lint": "n8n-node lint",
     "lint:fix": "n8n-node lint --fix",
-    "test": "node --experimental-strip-types --test tests/unwrap.test.ts tests/flatten.test.ts tests/pagination.test.ts tests/fieldTypes.test.ts tests/invoiceCatalog.test.ts tests/errors.test.ts tests/baseUrl.test.ts tests/structure.test.ts tests/apiFlags.test.ts tests/entityParam.test.ts tests/webhookAuth.test.ts tests/aiAccess.test.ts",
+    "test": "node --experimental-strip-types --test tests/unwrap.test.mts tests/flatten.test.mts tests/pagination.test.mts tests/fieldTypes.test.mts tests/invoiceCatalog.test.mts tests/errors.test.mts tests/baseUrl.test.mts tests/structure.test.mts tests/apiFlags.test.mts tests/entityParam.test.mts tests/webhookAuth.test.mts tests/aiAccess.test.mts",
     "test:execute": "tsc -p tsconfig.json && node --test tests/execute.test.mjs",
     "test:all": "npm test && npm run test:execute",
     "prepublishOnly": "n8n-node prerelease",

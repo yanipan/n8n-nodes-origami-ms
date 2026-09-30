@@ -1,5 +1,5 @@
 import type { IDataObject, IExecuteFunctions, INodeExecutionData } from 'n8n-workflow';
-import { NodeOperationError } from 'n8n-workflow';
+import { NodeApiError, NodeOperationError } from 'n8n-workflow';
 import { origamiApiRequest, origamiFileDownload, origamiUploadFile } from '../../shared/transport';
 import { flattenRecord } from '../../shared/flatten';
 import { unwrapRecords } from '../../shared/unwrap';
@@ -34,6 +34,67 @@ function maxRecords(this: IExecuteFunctions, itemIndex: number): number {
 
 function maybeSimplify(record: Record<string, unknown>, simplify: boolean): IDataObject {
 	return (simplify ? flattenRecord(record) : record) as IDataObject;
+}
+
+function failureDescription(
+	error: unknown,
+	meta: { resource: string; operation: string; itemIndex: number },
+): string {
+	const httpCode = error instanceof NodeApiError ? error.httpCode : undefined;
+	const rawOrigami =
+		error && typeof error === 'object' && 'context' in error
+			? (error as { context?: { origamiError?: unknown } }).context?.origamiError
+			: undefined;
+	const origamiError = typeof rawOrigami === 'string' && rawOrigami ? rawOrigami : undefined;
+	const parts: string[] = [];
+	if (httpCode) parts.push(`HTTP ${httpCode}`);
+	if (origamiError) parts.push(`Origami: ${origamiError}`);
+	if (meta.resource && meta.operation) parts.push(`${meta.resource}.${meta.operation}`);
+	parts.push(`item ${meta.itemIndex}`);
+	const message = error instanceof Error ? error.message : String(error);
+	if (message && !parts.some((part) => part.includes(message))) parts.push(message);
+	return parts.join('. ');
+}
+
+function asItemError(
+	this: IExecuteFunctions,
+	error: unknown,
+	meta: { resource: string; operation: string; itemIndex: number },
+): NodeApiError | NodeOperationError {
+	const description = failureDescription(error, meta);
+	// Re-wrapping NodeApiError in NodeOperationError drops httpCode. NodeApiError's
+	// constructor also ignores a second wrap, so set item index and description in place.
+	if (error instanceof NodeApiError || error instanceof NodeOperationError) {
+		error.context.itemIndex = meta.itemIndex;
+		error.description = description;
+		return error;
+	}
+	const message = error instanceof Error ? error.message : String(error);
+	return new NodeOperationError(this.getNode(), error instanceof Error ? error : message, {
+		message,
+		description,
+		itemIndex: meta.itemIndex,
+	});
+}
+
+function errorExecutionItem(
+	nodeError: NodeApiError | NodeOperationError,
+	meta: { resource: string; operation: string; itemIndex: number },
+): INodeExecutionData {
+	const rawOrigami = nodeError.context.origamiError;
+	const httpCode = nodeError instanceof NodeApiError ? nodeError.httpCode : null;
+	const json: IDataObject = {
+		error: nodeError.message,
+		description: nodeError.description ?? '',
+		resource: meta.resource,
+		operation: meta.operation,
+		itemIndex: meta.itemIndex,
+	};
+	if (httpCode) json.httpCode = httpCode;
+	if (typeof rawOrigami === 'string' && rawOrigami) json.origamiError = rawOrigami;
+	// n8n 2.39 handleNodeErrorOutput moves an item to the error output when item.error
+	// is set. json.error alone is used only when every json key is error, message or details.
+	return { json, pairedItem: { item: meta.itemIndex }, error: nodeError };
 }
 
 function entityName(this: IExecuteFunctions, itemIndex: number): string {
@@ -74,9 +135,11 @@ export async function executeOrigami(this: IExecuteFunctions): Promise<INodeExec
 	let aiAgentAccess: unknown;
 
 	for (let i = 0; i < items.length; i++) {
+		let resource = '';
+		let operation = '';
 		try {
-			const resource = this.getNodeParameter('resource', i) as string;
-			const operation = this.getNodeParameter('operation', i) as string;
+			resource = this.getNodeParameter('resource', i) as string;
+			operation = this.getNodeParameter('operation', i) as string;
 			if (isToolNodeType(nodeType)) {
 				aiAgentAccess ??= (await this.getCredentials('origamiApi')).aiAgentAccess ?? 'readOnly';
 				const violation = aiAccessViolation({ nodeType, resource, operation, access: aiAgentAccess });
@@ -565,11 +628,12 @@ export async function executeOrigami(this: IExecuteFunctions): Promise<INodeExec
 				itemIndex: i,
 			});
 		} catch (error) {
+			const nodeError = asItemError.call(this, error, { resource, operation, itemIndex: i });
 			if (this.continueOnFail()) {
-				returnData.push({ json: { error: (error as Error).message }, pairedItem: { item: i } });
+				returnData.push(errorExecutionItem(nodeError, { resource, operation, itemIndex: i }));
 				continue;
 			}
-			throw new NodeOperationError(this.getNode(), error as Error, { itemIndex: i });
+			throw nodeError;
 		}
 	}
 

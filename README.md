@@ -49,7 +49,7 @@ Typical flow:
 
 ## Behavior notes
 
-- **Errors**: Origami can answer `HTTP 200` with `{ "error": … }`. The node treats that as a failure (or an error item with Continue On Fail).
+- **Errors**: Settings, On Error supports all three modes. Stop Workflow throws the API error itself, so the HTTP status and description stay attached (resource, operation and item index are in the description). Continue returns one item per input. A failed item has `error`, `description`, `httpCode` when the status is an HTTP error, `origamiError` when Origami sent an error, `resource`, `operation`, `itemIndex` and the paired item. Continue using the error output routes that failed item to the error branch (`item.error` is set, which is what n8n 2.x reads when the json has more than `error`, `message` and `details`). An Origami `HTTP 200` body `{ "error": … }` is a failure in every mode.
 - **Pagination**: Origami pages with `limit: [skip, count]`. **Return All** pages 100 at a time, sorted by `_id` ascending unless you set Order By, so records created during the run do not shift pages. It stops at **Max Records** (default 5000) and shows a warning in the output pane when more rows exist.
 - **Get by ID** also finds archived records. **Get Many** excludes archived records unless Include Archived is on.
 - **File upload**: Origami file fields hold one file. Uploading replaces the file currently in the field.
