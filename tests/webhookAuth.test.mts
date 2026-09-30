@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { headerValue, safeEqual } from '../shared/webhookAuth.ts';
-import { buildMultipartBody, sanitizeMultipartName } from '../shared/multipart.ts';
+import { sanitizeMultipartName } from '../shared/multipart.ts';
 
 test('safeEqual matches only identical strings', () => {
 	assert.equal(safeEqual('secret', 'secret'), true);
@@ -18,8 +18,5 @@ test('headerValue reads lowercased express headers', () => {
 
 test('multipart file name cannot break the header', () => {
 	assert.equal(sanitizeMultipartName('a"\r\nb.txt'), 'a___b.txt');
-	const body = buildMultipartBody('B', { username: 'u' }, { fieldName: 'file', fileName: 'x".txt', buffer: Buffer.from('hi') }).toString();
-	assert.ok(body.includes('name="username"\r\n\r\nu\r\n'));
-	assert.ok(body.includes('filename="x_.txt"'));
-	assert.ok(body.endsWith('\r\n--B--\r\n'));
+	assert.equal(sanitizeMultipartName('dir\\x.txt'), 'dir_x.txt');
 });

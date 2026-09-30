@@ -8,7 +8,7 @@ import type {
 import { NodeApiError, NodeOperationError } from 'n8n-workflow';
 import { getBaseUrl } from './baseUrl';
 import { extractOrigamiError, isHttpErrorStatus } from './errors';
-import { buildMultipartBody } from './multipart';
+import { sanitizeMultipartName } from './multipart';
 
 export const BROWSER_UA =
 	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
@@ -159,6 +159,20 @@ export async function origamiFileDownload(
 	return { buffer, contentType };
 }
 
+/**
+ * Multipart body for file uploads. n8n's generic credential auth sets `username` and `api_secret`
+ * as properties on the request body; these setters turn them into real form fields.
+ */
+class OrigamiUploadForm extends FormData {
+	set username(value: unknown) {
+		this.set('username', String(value ?? ''));
+	}
+
+	set api_secret(value: unknown) {
+		this.set('api_secret', String(value ?? ''));
+	}
+}
+
 export async function origamiUploadFile(
 	this: IExecuteFunctions,
 	fields: {
@@ -175,34 +189,27 @@ export async function origamiUploadFile(
 		accountName: credentials.accountName as string | undefined,
 		customBaseUrl: credentials.customBaseUrl as string | undefined,
 	});
-	const boundary = `----OrigamiBoundary${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
-	const body = buildMultipartBody(
-		boundary,
-		{
-			username: String(credentials.username ?? ''),
-			api_secret: String(credentials.apiSecret ?? ''),
-			entity_data_name: fields.entity_data_name,
-			instance_id: fields.instance_id,
-			field_data_name: fields.field_data_name,
-		},
-		{ fieldName: 'file', fileName: fields.fileName, mimeType: fields.mimeType, buffer: fields.fileBuffer },
+	const form = new OrigamiUploadForm();
+	form.append('entity_data_name', fields.entity_data_name);
+	form.append('instance_id', fields.instance_id);
+	form.append('field_data_name', fields.field_data_name);
+	form.append(
+		'file',
+		new Blob([new Uint8Array(fields.fileBuffer)], { type: fields.mimeType || 'application/octet-stream' }),
+		sanitizeMultipartName(fields.fileName),
 	);
 	const endpoint = '/entities/api/upload_file/format/json';
-	// Plain httpRequest (not WithAuthentication): generic auth would try to merge
-	// username/api_secret into a Buffer body. Credentials are already in the multipart parts.
 	let response: { statusCode?: number; body?: unknown };
 	try {
-		// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
-		response = (await this.helpers.httpRequest({
+		// No Content-Type header: the HTTP client sets multipart/form-data with the boundary and length.
+		response = (await this.helpers.httpRequestWithAuthentication.call(this, 'origamiApi', {
 			method: 'POST',
 			url: `${baseUrl}${endpoint}`,
 			headers: {
 				'User-Agent': BROWSER_UA,
 				Accept: 'application/json',
-				'Content-Type': `multipart/form-data; boundary=${boundary}`,
-				'Content-Length': body.length,
 			},
-			body,
+			body: form,
 			ignoreHttpStatusErrors: true,
 			returnFullResponse: true,
 		})) as { statusCode?: number; body?: unknown };

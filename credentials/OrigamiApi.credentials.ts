@@ -1,5 +1,6 @@
 import type {
 	IAuthenticateGeneric,
+	ICredentialTestRequest,
 	ICredentialType,
 	INodeProperties,
 	Icon,
@@ -93,5 +94,29 @@ export class OrigamiApi implements ICredentialType {
 				api_secret: '={{$credentials.apiSecret}}',
 			},
 		},
+	};
+
+	// Same rule as shared/baseUrl.ts: custom base URL without trailing slashes, else https://{account}.origami.ms.
+	// Origami answers a wrong username or API secret with HTTP 200 and {"error":{"type":"login"}},
+	// so the rule below turns that body into a failed test.
+	test: ICredentialTestRequest = {
+		request: {
+			baseURL:
+				"={{ ($credentials.customBaseUrl || '').trim().replace(/\\/+$/, '') || 'https://' + ($credentials.accountName || '').trim() + '.origami.ms' }}",
+			url: '/entities/api/entities_list/format/json',
+			method: 'POST',
+			body: {},
+			json: true,
+		},
+		rules: [
+			{
+				type: 'responseSuccessBody',
+				properties: {
+					key: 'error.type',
+					value: 'login',
+					message: 'Wrong username or API secret',
+				},
+			},
+		],
 	};
 }

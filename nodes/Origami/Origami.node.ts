@@ -1,8 +1,5 @@
 import type {
-	ICredentialTestFunctions,
-	ICredentialsDecrypted,
 	IExecuteFunctions,
-	INodeCredentialTestResult,
 	ILoadOptionsFunctions,
 	INodeListSearchResult,
 	INodePropertyOptions,
@@ -12,9 +9,7 @@ import type {
 import { NodeConnectionTypes } from 'n8n-workflow';
 import { origamiProperties } from './properties';
 import { executeOrigami } from './execute';
-import { BROWSER_UA, origamiApiRequest } from '../../shared/transport';
-import { getBaseUrl } from '../../shared/baseUrl';
-import { extractOrigamiError } from '../../shared/errors';
+import { origamiApiRequest } from '../../shared/transport';
 import { entityOptions, fieldOptions, groupOptions } from '../../shared/structure';
 import { extractEntityId } from '../../shared/entityParam';
 
@@ -97,48 +92,11 @@ export class Origami implements INodeType {
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],
 		usableAsTool: true,
-		credentials: [{ name: 'origamiApi', required: true, testedBy: 'origamiApiTest' }],
+		credentials: [{ name: 'origamiApi', required: true }],
 		properties: origamiProperties,
 	};
 
 	methods = {
-		credentialTest: {
-			// Origami answers a bad login with HTTP 200 + {error}, which n8n's declarative test counts as success.
-			async origamiApiTest(
-				this: ICredentialTestFunctions,
-				credential: ICredentialsDecrypted,
-			): Promise<INodeCredentialTestResult> {
-				const data = credential.data ?? {};
-				let baseUrl: string;
-				try {
-					baseUrl = getBaseUrl({
-						accountName: data.accountName as string | undefined,
-						customBaseUrl: data.customBaseUrl as string | undefined,
-					});
-				} catch (error) {
-					return { status: 'Error', message: (error as Error).message };
-				}
-				try {
-					// ICredentialTestFunctions only exposes request(); httpRequest is not available here.
-					// eslint-disable-next-line @n8n/community-nodes/no-deprecated-workflow-functions
-					const response = await this.helpers.request({
-						method: 'POST',
-						uri: `${baseUrl}/entities/api/entities_list/format/json`,
-						headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json' },
-						body: { username: data.username, api_secret: data.apiSecret },
-						json: true,
-					});
-					const apiError = extractOrigamiError(response);
-					if (apiError) return { status: 'Error', message: apiError };
-					if (response === null || typeof response !== 'object') {
-						return { status: 'Error', message: 'Unexpected non-JSON response. Check Account Name / Custom Base URL.' };
-					}
-					return { status: 'OK', message: 'Connection successful' };
-				} catch (error) {
-					return { status: 'Error', message: `Request failed: ${(error as Error).message}` };
-				}
-			},
-		},
 		listSearch: {
 			async searchEntities(
 				this: ILoadOptionsFunctions,
