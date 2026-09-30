@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-origami-ms",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "n8n community node for Origami.ms: entities, records, invoices, files, communications and webhooks",
   "keywords": [
     "n8n-community-node-package",
@@ -12,7 +12,7 @@
   "homepage": "https://origami.ms",
   "author": {
     "name": "Origami",
-    "email": "361479+yanipan@users.noreply.github.com",
+    "email": "yaniv@origami.ms",
     "url": "https://origami.ms"
   },
   "repository": {

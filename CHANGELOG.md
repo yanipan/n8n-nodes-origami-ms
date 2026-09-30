@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.9
+
+- Package metadata only: the author contact email is now a reachable address. No code changes.
+
 ## 0.1.8
 
 - Test connection now runs from the credential itself. It still reports a wrong username or API secret as an error, even though Origami answers those with HTTP 200.
